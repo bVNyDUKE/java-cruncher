@@ -1,33 +1,63 @@
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Vector;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class Main {
     private static Vector<Long> seeds = new Vector<>();
-    private static HashMap<Object, Vector<List<Long>>> allMaps;
 
-    public static void main(String[] args) {
+    private static Vector<List<Long>> soilmap;
+    private static Vector<List<Long>> fertMap;
+    private static Vector<List<Long>> waterMap;
+    private static Vector<List<Long>> lightMap;
+    private static Vector<List<Long>> tempMap;
+    private static Vector<List<Long>> humidMap;
+    private static Vector<List<Long>> locMap;
+
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
         var alm = readAlm();
         parseSeeds(alm.removeFirst());
         parseMaps(alm);
+        var threads = Runtime.getRuntime().availableProcessors();
+        System.out.println("THREADS: " + threads);
 
-        Long result = null;
-        for (Long seed : seeds) {
-            var res = getLocationFromSeed(seed);
-            if (result == null || res < result) {
-                result = res;
+        try (ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor()) {
+            List<Callable<Long>> callables = new ArrayList<>();
+
+            for (int i = 0; i < seeds.size(); i += 2) {
+                var start = seeds.get(i);
+                var end = seeds.get(i + 1) + start;
+                var mid = (long) (Math.round((float) (start + end) / 2) - 1);
+                callables.add(() -> runTask(start, mid));
+                callables.add(() -> runTask(mid + 1, end));
             }
+
+            Long result = null;
+            for (Future<Long> f : ex.invokeAll(callables)) {
+                var res = f.get();
+                if (result == null || res < result) {
+                    result = res;
+                }
+            }
+            System.out.println("RESULT: " + result);
         }
 
-        System.out.println("Seeds" + seeds);
-        System.out.println("Maps" + allMaps);
-        System.out.println("Result " + result);
+
+    }
+
+    private static Long runTask(Long start, Long end) {
+        Long finalRes = null;
+        for (Long k = start; k < end; k++) {
+            var res = getLocationFromSeed(k);
+            if (finalRes == null || res < finalRes) {
+                finalRes = res;
+                System.out.println("Returned " + finalRes);
+            }
+        }
+        return finalRes;
     }
 
     private static Vector<String> readAlm() {
@@ -48,7 +78,7 @@ public class Main {
     }
 
     private static void parseMaps(Vector<String> alm) {
-        allMaps = Arrays.stream(alm.stream()
+        var allMaps = Arrays.stream(alm.stream()
                         .collect(Collectors.joining(System.lineSeparator()))
                         .split("\n\n"))
                 .map(Main::splitMap)
@@ -61,6 +91,13 @@ public class Main {
                                                     .collect(Collectors.toList()))
                                     .collect(Collectors.toCollection(Vector::new)));
                         }, (v1, v2) -> v1, HashMap::new));
+        soilmap = allMaps.get("seed-to-soil");
+        fertMap = allMaps.get("soil-to-fertilizer");
+        waterMap = allMaps.get("fertilizer-to-water");
+        lightMap = allMaps.get("water-to-light");
+        tempMap = allMaps.get("light-to-temperature");
+        humidMap = allMaps.get("temperature-to-humidity");
+        locMap = allMaps.get("humidity-to-location");
     }
 
     private static Vector<String> splitMap(String s) {
@@ -70,13 +107,13 @@ public class Main {
     }
 
     private static Long getLocationFromSeed(Long seed) {
-        var res = convertMapToVal(seed, allMaps.get("seed-to-soil"));
-        res = convertMapToVal(res, allMaps.get("soil-to-fertilizer"));
-        res = convertMapToVal(res, allMaps.get("fertilizer-to-water"));
-        res = convertMapToVal(res, allMaps.get("water-to-light"));
-        res = convertMapToVal(res, allMaps.get("light-to-temperature"));
-        res = convertMapToVal(res, allMaps.get("temperature-to-humidity"));
-        res = convertMapToVal(res, allMaps.get("humidity-to-location"));
+        var res = convertMapToVal(seed, soilmap);
+        res = convertMapToVal(res, fertMap);
+        res = convertMapToVal(res, waterMap);
+        res = convertMapToVal(res, lightMap);
+        res = convertMapToVal(res, tempMap);
+        res = convertMapToVal(res, humidMap);
+        res = convertMapToVal(res, locMap);
         return res;
     }
 
