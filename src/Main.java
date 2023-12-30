@@ -6,15 +6,15 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class Main {
-    private static final List<List<Long>> seeds = new ArrayList<>();
+    private static final List<long[]> seeds = new ArrayList<>();
 
-    private static List<List<Long>> soilMap;
-    private static List<List<Long>> fertMap;
-    private static List<List<Long>> waterMap;
-    private static List<List<Long>> lightMap;
-    private static List<List<Long>> tempMap;
-    private static List<List<Long>> humidMap;
-    private static List<List<Long>> locMap;
+    private static List<long[]> soilMap;
+    private static List<long[]> fertMap;
+    private static List<long[]> waterMap;
+    private static List<long[]> lightMap;
+    private static List<long[]> tempMap;
+    private static List<long[]> humidMap;
+    private static List<long[]> locMap;
 
     public static void main(String[] args) {
         var alm = readAlm();
@@ -24,7 +24,7 @@ public class Main {
 
         var location = seeds.stream()
                 .parallel()
-                .map(range -> runTask(range.getFirst(), range.getLast()))
+                .map(range -> runTask(range[0], range[1]))
                 .min(Long::compare)
                 .orElseThrow();
 
@@ -64,41 +64,34 @@ public class Main {
             var end = start + seedList.get(i + 1);
             var mid = (long) Math.round((float) (start + end) / 2) - 1;
 
-            var l = new ArrayList<Long>();
-            l.add(start);
-            l.add(mid);
-            seeds.add(l);
-
-            var k = new ArrayList<Long>();
-            k.add(mid + 1);
-            k.add(end);
-            seeds.add(k);
+            seeds.add(new long[]{start, mid});
+            seeds.add(new long[]{mid + 1, end});
         }
     }
 
     private static void parseMaps(Vector<String> alm) {
-        var allMaps = Arrays.stream(alm.stream()
-                        .collect(Collectors.joining(System.lineSeparator()))
-                        .split("\n\n"))
-                .map(Main::splitMap)
-                .collect(Collectors.toMap(
-                        key -> Arrays.stream(key.getFirst().split(" ")).toArray()[0],
-                        v -> {
-                            v.removeFirst();
-                            return v.stream().map(el ->
-                                    Arrays.stream(el.split(" "))
-                                            .map(Long::parseLong)
-                                            .collect(Collectors.toList())
-                            ).collect(Collectors.toCollection(ArrayList::new));
-                        }, (v1, v2) -> v1, HashMap::new));
+        for (String s : alm.stream()
+                .collect(Collectors.joining(System.lineSeparator()))
+                .split("\n\n")) {
+            List<String> row = splitMap(s);
+            String key = row.removeFirst();
+            var res = row.stream()
+                    .map(line -> Arrays.stream(line.split(" ")).mapToLong(Long::parseLong).toArray())
+                    .toList();
+            System.out.println("KEY IS " + key);
+            System.out.println("RES IS " + res);
 
-        soilMap = allMaps.get("seed-to-soil");
-        fertMap = allMaps.get("soil-to-fertilizer");
-        waterMap = allMaps.get("fertilizer-to-water");
-        lightMap = allMaps.get("water-to-light");
-        tempMap = allMaps.get("light-to-temperature");
-        humidMap = allMaps.get("temperature-to-humidity");
-        locMap = allMaps.get("humidity-to-location");
+            switch (key) {
+                case String k when k.startsWith("seed-to-soil") -> soilMap = res;
+                case String k when k.startsWith("soil-to-fertilizer") -> fertMap = res;
+                case String k when k.startsWith("fertilizer-to-water") -> waterMap = res;
+                case String k when k.startsWith("water-to-light") -> lightMap = res;
+                case String k when k.startsWith("light-to-temperature") -> tempMap = res;
+                case String k when k.startsWith("temperature-to-humidity") -> humidMap = res;
+                case String k when k.startsWith("humidity-to-location") -> locMap = res;
+                default -> throw new RuntimeException("SHIT");
+            }
+        }
     }
 
     private static List<String> splitMap(String s) {
@@ -119,10 +112,10 @@ public class Main {
     }
 
 
-    private static Long convertMapToVal(Long seed, List<List<Long>> map) {
-        for (List<Long> l : map) {
-            if (l.get(1) <= seed && seed < l.get(1) + l.get(2)) {
-                return seed + (l.getFirst() - l.get(1));
+    private static Long convertMapToVal(Long seed, List<long[]> map) {
+        for (long[] l : map) {
+            if (l[1] <= seed && seed < l[1] + l[2]) {
+                return seed + (l[0] - l[1]);
             }
         }
         return seed;
