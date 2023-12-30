@@ -2,57 +2,40 @@ import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.*;
-import java.util.concurrent.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class Main {
-    private static Vector<Long> seeds = new Vector<>();
+    private static final List<List<Long>> seeds = new ArrayList<>();
 
-    private static Vector<List<Long>> soilmap;
-    private static Vector<List<Long>> fertMap;
-    private static Vector<List<Long>> waterMap;
-    private static Vector<List<Long>> lightMap;
-    private static Vector<List<Long>> tempMap;
-    private static Vector<List<Long>> humidMap;
-    private static Vector<List<Long>> locMap;
+    private static List<List<Long>> soilMap;
+    private static List<List<Long>> fertMap;
+    private static List<List<Long>> waterMap;
+    private static List<List<Long>> lightMap;
+    private static List<List<Long>> tempMap;
+    private static List<List<Long>> humidMap;
+    private static List<List<Long>> locMap;
 
-    public static void main(String[] args) throws InterruptedException, ExecutionException {
+    public static void main(String[] args) {
         var alm = readAlm();
         parseSeeds(alm.removeFirst());
         parseMaps(alm);
-        var threads = Runtime.getRuntime().availableProcessors();
-        System.out.println("THREADS: " + threads);
+        System.out.println(seeds);
 
-        try (ExecutorService ex = Executors.newVirtualThreadPerTaskExecutor()) {
-            List<Callable<Long>> callables = new ArrayList<>();
+        var location = seeds.stream()
+                .parallel()
+                .map(range -> runTask(range.getFirst(), range.getLast()))
+                .min(Long::compare)
+                .orElseThrow();
 
-            for (int i = 0; i < seeds.size(); i += 2) {
-                var start = seeds.get(i);
-                var end = seeds.get(i + 1) + start;
-                var mid = (long) (Math.round((float) (start + end) / 2) - 1);
-                callables.add(() -> runTask(start, mid));
-                callables.add(() -> runTask(mid + 1, end));
-            }
-
-            Long result = null;
-            for (Future<Long> f : ex.invokeAll(callables)) {
-                var res = f.get();
-                if (result == null || res < result) {
-                    result = res;
-                }
-            }
-            System.out.println("RESULT: " + result);
-        }
-
-
+        System.out.println("RESULT: " + location);
     }
 
     private static Long runTask(Long start, Long end) {
-        Long finalRes = null;
+        Long finalRes = start;
         for (Long k = start; k < end; k++) {
             var res = getLocationFromSeed(k);
-            if (finalRes == null || res < finalRes) {
+            if (res < finalRes) {
                 finalRes = res;
                 System.out.println("Returned " + finalRes);
             }
@@ -71,10 +54,26 @@ public class Main {
     }
 
     private static void parseSeeds(String seedLine) {
-        seeds = Arrays.stream(seedLine.split(" "))
+        var seedList = Arrays.stream(seedLine.split(" "))
                 .filter(Predicate.not((str) -> str.startsWith("seeds")))
                 .map(Long::parseLong)
-                .collect(Collectors.toCollection(Vector::new));
+                .toList();
+
+        for (int i = 0; i < seedList.size(); i += 2) {
+            var start = seedList.get(i);
+            var end = start + seedList.get(i + 1);
+            var mid = (long) Math.round((float) (start + end) / 2) - 1;
+
+            var l = new ArrayList<Long>();
+            l.add(start);
+            l.add(mid);
+            seeds.add(l);
+
+            var k = new ArrayList<Long>();
+            k.add(mid + 1);
+            k.add(end);
+            seeds.add(k);
+        }
     }
 
     private static void parseMaps(Vector<String> alm) {
@@ -82,16 +81,18 @@ public class Main {
                         .collect(Collectors.joining(System.lineSeparator()))
                         .split("\n\n"))
                 .map(Main::splitMap)
-                .collect(Collectors.toMap(key -> Arrays.stream(key.getFirst().split(" ")).toArray()[0],
+                .collect(Collectors.toMap(
+                        key -> Arrays.stream(key.getFirst().split(" ")).toArray()[0],
                         v -> {
                             v.removeFirst();
-                            return new Vector<List<Long>>(v.stream().map(el ->
-                                            Arrays.stream(el.split(" "))
-                                                    .map(Long::parseLong)
-                                                    .collect(Collectors.toList()))
-                                    .collect(Collectors.toCollection(Vector::new)));
+                            return v.stream().map(el ->
+                                    Arrays.stream(el.split(" "))
+                                            .map(Long::parseLong)
+                                            .collect(Collectors.toList())
+                            ).collect(Collectors.toCollection(ArrayList::new));
                         }, (v1, v2) -> v1, HashMap::new));
-        soilmap = allMaps.get("seed-to-soil");
+
+        soilMap = allMaps.get("seed-to-soil");
         fertMap = allMaps.get("soil-to-fertilizer");
         waterMap = allMaps.get("fertilizer-to-water");
         lightMap = allMaps.get("water-to-light");
@@ -100,14 +101,14 @@ public class Main {
         locMap = allMaps.get("humidity-to-location");
     }
 
-    private static Vector<String> splitMap(String s) {
+    private static List<String> splitMap(String s) {
         return Arrays.stream(s.split(System.lineSeparator()))
                 .filter(Predicate.not(String::isEmpty))
-                .collect(Collectors.toCollection(Vector::new));
+                .collect(Collectors.toList());
     }
 
     private static Long getLocationFromSeed(Long seed) {
-        var res = convertMapToVal(seed, soilmap);
+        var res = convertMapToVal(seed, soilMap);
         res = convertMapToVal(res, fertMap);
         res = convertMapToVal(res, waterMap);
         res = convertMapToVal(res, lightMap);
@@ -118,7 +119,7 @@ public class Main {
     }
 
 
-    private static Long convertMapToVal(Long seed, Vector<List<Long>> map) {
+    private static Long convertMapToVal(Long seed, List<List<Long>> map) {
         for (List<Long> l : map) {
             if (l.get(1) <= seed && seed < l.get(1) + l.get(2)) {
                 return seed + (l.getFirst() - l.get(1));
