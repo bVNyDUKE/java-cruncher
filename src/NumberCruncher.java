@@ -6,7 +6,7 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
-public class Main {
+public class NumberCruncher {
     private static final List<LongStream> seeds = new ArrayList<>();
 
     private static List<long[]> soilMap;
@@ -25,7 +25,7 @@ public class Main {
         var loc = seeds.stream()
                 .parallel()
                 .map(s -> s.parallel()
-                        .map(Main::getLocationFromSeed)
+                        .map(NumberCruncher::getLocationFromSeed)
                         .min()
                         .orElseThrow()
                 )
