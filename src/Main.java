@@ -4,9 +4,10 @@ import java.io.IOException;
 import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 public class Main {
-    private static final List<long[]> seeds = new ArrayList<>();
+    private static final List<LongStream> seeds = new ArrayList<>();
 
     private static List<long[]> soilMap;
     private static List<long[]> fertMap;
@@ -20,27 +21,17 @@ public class Main {
         var alm = readAlm();
         parseSeeds(alm.removeFirst());
         parseMaps(alm);
-        System.out.println(seeds);
 
-        var location = seeds.stream()
+        var loc = seeds.stream()
                 .parallel()
-                .map(range -> runTask(range[0], range[1]))
+                .map(s -> s.parallel()
+                        .map(Main::getLocationFromSeed)
+                        .min()
+                        .orElseThrow()
+                )
                 .min(Long::compare)
                 .orElseThrow();
-
-        System.out.println("RESULT: " + location);
-    }
-
-    private static Long runTask(Long start, Long end) {
-        Long finalRes = start;
-        for (Long k = start; k < end; k++) {
-            var res = getLocationFromSeed(k);
-            if (res < finalRes) {
-                finalRes = res;
-                System.out.println("Returned " + finalRes);
-            }
-        }
-        return finalRes;
+        System.out.println("RESULT: " + loc);
     }
 
     private static Vector<String> readAlm() {
@@ -56,16 +47,19 @@ public class Main {
     private static void parseSeeds(String seedLine) {
         var seedList = Arrays.stream(seedLine.split(" "))
                 .filter(Predicate.not((str) -> str.startsWith("seeds")))
+                .filter(Predicate.not(String::isEmpty))
+                .filter(Predicate.not(String::isBlank))
                 .map(Long::parseLong)
                 .toList();
+
 
         for (int i = 0; i < seedList.size(); i += 2) {
             var start = seedList.get(i);
             var end = start + seedList.get(i + 1);
-            var mid = (long) Math.round((float) (start + end) / 2) - 1;
+            var mid = (start + end) / 2;
 
-            seeds.add(new long[]{start, mid});
-            seeds.add(new long[]{mid + 1, end});
+            seeds.add(LongStream.range(start, mid));
+            seeds.add(LongStream.range(mid, end + 1));
         }
     }
 
@@ -76,10 +70,10 @@ public class Main {
             List<String> row = splitMap(s);
             String key = row.removeFirst();
             var res = row.stream()
-                    .map(line -> Arrays.stream(line.split(" ")).mapToLong(Long::parseLong).toArray())
+                    .map(line -> Arrays.stream(line.split(" "))
+                            .mapToLong(Long::parseLong)
+                            .toArray())
                     .toList();
-            System.out.println("KEY IS " + key);
-            System.out.println("RES IS " + res);
 
             switch (key) {
                 case String k when k.startsWith("seed-to-soil") -> soilMap = res;
